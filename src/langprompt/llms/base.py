@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
 from tqdm import tqdm
+from tenacity import stop_after_attempt, wait_exponential, Retrying
 
 from ..base.message import Message
 from ..base.response import Completion, merge_stream_completions
@@ -113,6 +114,10 @@ class BaseLLM(ABC):
         except Exception as e:
             print(f"Error saving to store: {e}")  # Log error but don't raise
 
+    def chat_with_retry(self, messages: List[Message], **kwargs) -> Completion:
+        retryer = Retrying(reraise=True, stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=6))
+        return retryer(self.chat, messages, **kwargs)
+
     def chat(
         self,
         messages: List[Message],
@@ -187,16 +192,17 @@ class BaseLLM(ABC):
     ) -> Iterator[Completion]:
         pass
 
-    def batch(self, messages: List[List[Message]], batch_size: int = 10, **kwargs) -> List[Completion]:
+    def batch(self, messages: List[List[Message]], batch_size: int = 10, enable_retry: bool = False, **kwargs) -> List[Optional[Completion]]:
         """Batch run with multi-thread with progress bar
 
         Returns:
-            List[Completion]: List of completions, failed requests will return error completion
+            List[Optional[Completion]]: List of completions, failed requests will return error completion
         """
         results: List[Optional[Completion]] = [None] * len(messages)
+        chat_func = self.chat if not enable_retry else self.chat_with_retry
         with ThreadPoolExecutor(max_workers=batch_size) as executor:
             futures = {
-                executor.submit(self.chat, msg, **kwargs): idx
+                executor.submit(chat_func, msg, **kwargs): idx
                 for idx, msg in enumerate(messages)
             }
 
@@ -218,11 +224,4 @@ class BaseLLM(ABC):
                     finally:
                         pbar.update(1)
 
-        # Ensure all results are Completion instances
-        return [result if result is not None else Completion(
-            id="",
-            created=0,
-            content="Error: Unknown error occurred",
-            finish_reason="error",
-            model=f"{self.__class__.__name__}/{self.model}"
-        ) for result in results]
+        return results

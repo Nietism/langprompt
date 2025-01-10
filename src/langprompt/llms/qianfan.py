@@ -23,6 +23,7 @@ class Qianfan(BaseLLM):
         endpoint: Optional[str] = None,
         cache: Optional[BaseCache] = None,
         store: Optional[BaseStore] = None,
+        query_per_second: float = 0,
         **kwargs
     ):
         """Initialize Qianfan provider
@@ -34,7 +35,7 @@ class Qianfan(BaseLLM):
             cache: Cache implementation
             **kwargs: Additional arguments to pass to the Qianfan client
         """
-        super().__init__(cache=cache, store=store)
+        super().__init__(cache=cache, store=store, query_per_second=query_per_second)
         chat_kwargs = kwargs.copy()
         chat_kwargs["model"] = model
         chat_kwargs["temperature"] = temperature

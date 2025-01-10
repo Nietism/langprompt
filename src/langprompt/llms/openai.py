@@ -23,6 +23,7 @@ class OpenAI(BaseLLM):
         temperature: float = 1.0,
         cache: Optional[BaseCache] = None,
         store: Optional[BaseStore] = None,
+        query_per_second: float = 0,
         **kwargs
     ):
         """Initialize OpenAI provider
@@ -33,7 +34,7 @@ class OpenAI(BaseLLM):
             cache: Cache implementation
             **kwargs: Additional arguments to pass to the OpenAI client
         """
-        super().__init__(cache=cache, store=store)
+        super().__init__(cache=cache, store=store, query_per_second=query_per_second)
         self.client = openai.OpenAI(**kwargs)
         self.model = model
         self.temperature = temperature

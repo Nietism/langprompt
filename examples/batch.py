@@ -1,10 +1,8 @@
-"""
-pip install langprompt[qianfan]
-"""
 from pydantic import BaseModel
 from langprompt import TextOutputParser, Prompt
-from langprompt.llms.qianfan import Qianfan
-
+from langprompt.llms.openai import OpenAI
+from langprompt.cache import SQLiteCache
+from langprompt.store import DuckDBStore
 
 
 class Input(BaseModel):
@@ -21,24 +19,18 @@ Translate the following text into {{language}}: {{text}}
 <|end|>
 """)
 
-parser = TextOutputParser()
-
-
 if __name__ == "__main__":
-    provider = Qianfan(model="ERNIE-4.0-Turbo-8K", query_per_second=0.2)
 
-    # 准备多条输入数据
+    parser = TextOutputParser()
+    provider = OpenAI(model="gpt-4o-mini", cache=SQLiteCache(), store=DuckDBStore(), query_per_second=0.2)
     inputs = [
         Input(text="Hello, how are you?", language="Chinese"),
-        Input(text="I love programming.", language="Chinese"),
-        Input(text="What a beautiful day!", language="Chinese")
+        Input(text="Hello, how are you?", language="English"),
+        Input(text="Hello, how are you?", language="Chinese"),
     ]
 
-    # 将所有输入转换为消息格式
-    all_messages = [prompt.parse(input_data) for input_data in inputs]
-
-    # 批量处理
-    responses = provider.batch(all_messages, batch_size=3)
+    messages = [prompt.parse(input) for input in inputs]
+    responses = provider.batch(messages, batch_size=2, enable_retry=True)
 
     # 处理结果
     for i, response in enumerate(responses):
@@ -46,3 +38,4 @@ if __name__ == "__main__":
         print(f"Original: {inputs[i].text}")
         result = parser.parse(response)
         print(f"Translated: {result}")
+        print(f"Cache Key: {response.cache_key}")

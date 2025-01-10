@@ -446,6 +446,7 @@ dependencies = [
     { name = "jinja2" },
     { name = "openai" },
     { name = "pydantic" },
+    { name = "tenacity" },
     { name = "tqdm" },
 ]
 
@@ -467,6 +468,7 @@ requires-dist = [
     { name = "pytest", marker = "extra == 'test'", specifier = ">=7.4.0" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.1.0" },
     { name = "qianfan", marker = "extra == 'qianfan'", specifier = ">=0.4.12.2" },
+    { name = "tenacity", specifier = ">=8.5.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
 
