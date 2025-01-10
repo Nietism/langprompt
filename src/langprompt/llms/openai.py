@@ -10,7 +10,7 @@ except ImportError:
 # Local imports
 from ..base.message import Message, TextPart, ImagePart
 from ..base.response import Completion, CompletionUsage
-from ..trace import BaseStore
+from ..store import BaseStore
 from ..cache import BaseCache
 from .base import BaseLLM
 

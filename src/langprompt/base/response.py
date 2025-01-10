@@ -53,7 +53,7 @@ class Completion(BaseModel):
     usage: Optional[CompletionUsage] = None
     """Usage statistics for the completion request."""
 
-    finish_reason: Optional[Literal["stop", "length", "tool_calls", "content_filter"]] = None
+    finish_reason: Optional[Literal["stop", "length", "tool_calls", "content_filter", "error"]] = None
     """The reason the model stopped generating tokens.
 
     This will be `stop` if the model hit a natural stop point or a provided stop
@@ -73,3 +73,24 @@ class Completion(BaseModel):
 
     raw_response: Optional[Dict[str, Any]] = None
     """The raw response from the model."""
+
+    cache_key: Optional[str] = None
+    """The cache key for the response if hit cache"""
+
+
+def merge_stream_completions(completions: List[Completion]) -> Completion:
+    """Merge multiple stream completions into a single completion
+
+    Args:
+        completions: List of stream completions to merge
+
+    Returns:
+        Merged completion containing concatenated content
+    """
+    # Use the last completion as the base
+    # TODO: Maybe is not the best way
+    last_completion = completions[-1]
+    # Merge content
+    merged_content = "".join([c.content for c in completions if c.content])
+    last_completion.content = merged_content
+    return last_completion

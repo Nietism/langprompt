@@ -90,7 +90,7 @@ class ResponseRecord(Record):
             assistant_message=response.content,
             finish_reason=response.finish_reason,
             tool_calls=response.tool_calls,
-            messages=[{"role": msg.role, "content": msg.content_str} for msg in messages],
+            messages=[msg.model_dump() for msg in messages],
             raw_response=response.raw_response,
             **kwargs,
         )

@@ -4,6 +4,7 @@ import sqlite3
 from typing import Any, Dict, Optional
 from datetime import datetime, timedelta
 import threading
+import time
 
 class BaseCache(ABC):
     @abstractmethod
@@ -34,7 +35,7 @@ class MemoryCache(BaseCache):
                 return None
 
             value, expiry = self._cache[key]
-            if expiry and datetime.now() > expiry:
+            if expiry and time.time() > expiry:
                 del self._cache[key]
                 return None
 
@@ -44,7 +45,7 @@ class MemoryCache(BaseCache):
         with self._lock:
             expiry = None
             if self._ttl:
-                expiry = datetime.now() + timedelta(seconds=self._ttl)
+                expiry = time.time() + self._ttl
             self._cache[key] = (value, expiry)
 
     def delete(self, key: str) -> None:

@@ -5,7 +5,7 @@ from: https://github.com/Mirascope/mirascope/blob/main/mirascope/core/base/messa
 import base64
 from collections.abc import Sequence
 from typing import Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, field_serializer
 
 class TextPart(BaseModel):
     """A content part for text.
@@ -52,13 +52,17 @@ class Message(BaseModel):
     @property
     def content_str(self) -> str:
         """Return the content as a string."""
-        if isinstance(self.content, str):
-            return self.content
+        return self.convert_content_to_str(self.content)
+    
+    def convert_content_to_str(self, content: str | Sequence[TextPart | ImagePart]) -> str:
+        if isinstance(content, str):
+            return content
         content_str = ""
-        for part in self.content:
+        for part in content:
             if isinstance(part, TextPart):
                 content_str += part.text
-            elif isinstance(part, ImagePart):
-                content_str += f'<|image media_type="{part.media_type}"|>{base64.b64encode(part.image).decode("utf-8")}<|/image|>'
         return content_str
 
+    @field_serializer('content')
+    def serialize_content(self, content: str | Sequence[TextPart | ImagePart], _info):
+        return self.convert_content_to_str(content)

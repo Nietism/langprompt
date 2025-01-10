@@ -31,7 +31,9 @@ Translate the following text into {{language}}: {{text}}
 
 
 if __name__ == "__main__":
-    provider = OpenAI(model="gpt-4o-mini")
+    from langprompt.cache import SQLiteCache
+    from langprompt.store import DuckDBStore
+    provider = OpenAI(model="gpt-4o-mini", cache=SQLiteCache(), store=DuckDBStore())
 
     translate = Translation(provider)
     result = translate(Translation.Input(text="Hello, how are you?", language="Chinese"))

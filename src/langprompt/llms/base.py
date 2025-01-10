@@ -1,23 +1,27 @@
 from abc import ABC, abstractmethod
 from typing import List, Iterator, Optional
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
+from tqdm import tqdm
+
 from ..base.message import Message
-from ..base.response import Completion
+from ..base.response import Completion, merge_stream_completions
 from ..cache import BaseCache
-from ..trace import BaseStore, DuckDBStore, ResponseRecord
+from ..store import BaseStore, DuckDBStore, ResponseRecord
+from .ratelimiter import ThreadingRateLimiter
 
 
-def _generate_key(messages: list, model: str, **kwargs) -> str:
+def _generate_key(messages: List[Message], model: str, **kwargs) -> str:
     """generate cache key"""
     cache_dict = {
-        "messages": messages,
+        "messages": [msg.model_dump() for msg in messages],
         "model": model,
         **kwargs
     }
     cache_str = json.dumps(cache_dict, sort_keys=True)
-    return hashlib.sha256(cache_str.encode()).hexdigest()
+    cache_key = hashlib.sha256(cache_str.encode()).hexdigest()
+    return cache_key
 
 class BaseLLM(ABC):
     """Abstract base class for all language model providers"""
@@ -28,6 +32,7 @@ class BaseLLM(ABC):
         self,
         cache: Optional[BaseCache] = None,
         store: Optional[BaseStore] = None,
+        query_per_second: float = 0,
     ):
         """初始化 LLM
 
@@ -37,6 +42,7 @@ class BaseLLM(ABC):
         """
         self.cache = cache
         self.store = store if store is not None else DuckDBStore.connect()
+        self.rate_limiter = ThreadingRateLimiter(query_per_second)
 
     def _get_from_cache(self, messages: List[Message], **kwargs) -> Optional[Completion]:
         """从缓存中获取结果"""
@@ -45,16 +51,17 @@ class BaseLLM(ABC):
 
         # 移除不应该影响缓存键的参数
         cache_kwargs = kwargs.copy()
-        cache_kwargs.pop('use_cache', None)
-        cache_kwargs.pop('cache_ttl', None)
+        for key in ['use_cache', 'cache_ttl', 'stream']:
+            cache_kwargs.pop(key, None)
 
         key = _generate_key(
-            messages=[msg.model_dump() for msg in messages],
+            messages=messages,
             model=self.__class__.__name__,
             **cache_kwargs
         )
         cached = self.cache.get(key)
         if cached:
+            cached["cache_key"] = key
             return Completion(**cached)
         return None
 
@@ -65,15 +72,46 @@ class BaseLLM(ABC):
 
         # 移除不应该影响缓存键的参数
         cache_kwargs = kwargs.copy()
-        cache_kwargs.pop('use_cache', None)
-        cache_kwargs.pop('cache_ttl', None)
+        for key in ['use_cache', 'cache_ttl', 'stream']:
+            cache_kwargs.pop(key, None)
 
         key = _generate_key(
-            messages=[msg.model_dump() for msg in messages],
+            messages=messages,
             model=self.__class__.__name__,
             **cache_kwargs
         )
         self.cache.set(key, completion.model_dump())
+
+    def _handle_cache(self, messages: List[Message], use_cache: bool = True, **kwargs) -> Optional[Completion]:
+        """Handle cache logic
+
+        Returns:
+            Optional[Completion]: Cached completion if exists and cache is enabled
+        """
+        if not use_cache:
+            return None
+
+        return self._get_from_cache(messages, **kwargs)
+
+    def _handle_store(self, messages: List[Message], completion: Optional[Completion] = None, error: Optional[Exception] = None):
+        """Handle store logic for tracking responses"""
+        try:
+            if completion:
+                entry = ResponseRecord.create(
+                    response=completion,
+                    messages=messages,
+                    model=f"{self.__class__.__name__}/{self.model}"
+                )
+                self.store.add(entry)
+            elif error:
+                entry = ResponseRecord.create(
+                    error=error,
+                    messages=messages,
+                    model=f"{self.__class__.__name__}/{self.model}"
+                )
+                self.store.add(entry)
+        except Exception as e:
+            print(f"Error saving to store: {e}")  # Log error but don't raise
 
     def chat(
         self,
@@ -81,43 +119,27 @@ class BaseLLM(ABC):
         use_cache: bool = True,
         **kwargs
     ) -> Completion:
-        """Send a chat completion request
-
-        Args:
-            messages: List of Message objects
-            use_cache: Use cache or not
-            **kwargs: Additional arguments to pass to the API
-
-        Returns:
-            Completion object
-        """
-        if use_cache:
-            if cache := self._get_from_cache(messages, **kwargs):
-                return cache
+        # Try to get from cache first
+        if cached := self._handle_cache(messages, use_cache, **kwargs):
+            self._handle_store(messages, completion=cached)
+            return cached
 
         try:
-            completion = self._chat(messages, **kwargs)
+            # Get completion from LLM
+            with self.rate_limiter:
+                completion = self._chat(messages, **kwargs)
 
-            # 记录追踪信息
-            entry = ResponseRecord.create(
-                response=completion,
-                messages=messages,
-                model=f"{self.__class__.__name__}/{self.model}" # use class_name/model as model name
-            )
-            self.store.add(entry)
-
-            if use_cache:
+            # Save to cache if enabled
+            if completion and use_cache:
                 self._save_to_cache(messages, completion, **kwargs)
 
-            return completion
+            # Save to store
+            self._handle_store(messages, completion=completion)
 
+            return completion
         except Exception as e:
-            entry = ResponseRecord.create(
-                error=e,
-                messages=messages,
-                model=f"{self.__class__.__name__}/{self.model}" # use class_name/model as model name
-            )
-            self.store.add(entry)
+            # Handle error
+            self._handle_store(messages, error=e)
             raise e
 
     @abstractmethod
@@ -131,21 +153,31 @@ class BaseLLM(ABC):
     def stream(
         self,
         messages: List[Message],
+        use_cache: bool = True,
         **kwargs
     ) -> Iterator[Completion]:
-        """Stream chat completion request
+        if cached := self._handle_cache(messages, use_cache, **kwargs):
+            self._handle_store(messages, completion=cached)
+            yield cached
+            return
 
-        Args:
-            messages: List of Message objects
-            use_cache: Use cache or not
-            cache_ttl: Cache expiration time (seconds)
-            **kwargs: Additional arguments to pass to the API
+        try:
+            # 获取流式响应
+            completions = []
+            for completion in self._stream(messages, **kwargs):
+                completions.append(completion)
+                yield completion
 
-        Returns:
-            Iterator of Completion objects
-        """
-        # TODO: stream support cache
-        return self._stream(messages, **kwargs)
+            # 合并所有completion并保存到缓存和store
+            if completions:
+                merged_completion = merge_stream_completions(completions)
+                if use_cache:
+                    self._save_to_cache(messages, merged_completion, **kwargs)
+                self._handle_store(messages, completion=merged_completion)
+
+        except Exception as e:
+            self._handle_store(messages, error=e)
+            raise e
 
     @abstractmethod
     def _stream(
@@ -154,3 +186,43 @@ class BaseLLM(ABC):
         **kwargs
     ) -> Iterator[Completion]:
         pass
+
+    def batch(self, messages: List[List[Message]], batch_size: int = 10, **kwargs) -> List[Completion]:
+        """Batch run with multi-thread with progress bar
+
+        Returns:
+            List[Completion]: List of completions, failed requests will return error completion
+        """
+        results: List[Optional[Completion]] = [None] * len(messages)
+        with ThreadPoolExecutor(max_workers=batch_size) as executor:
+            futures = {
+                executor.submit(self.chat, msg, **kwargs): idx
+                for idx, msg in enumerate(messages)
+            }
+
+            with tqdm(total=len(messages), desc="Processing batch") as pbar:
+                for future in as_completed(futures):
+                    idx = futures[future]
+                    try:
+                        results[idx] = future.result()
+                    except Exception as e:
+                        # 创建错误 Completion
+                        error_completion = Completion(
+                            id="",
+                            created=0,
+                            content=f"Error: {str(e)}",
+                            finish_reason="error",
+                            model=f"{self.__class__.__name__}/{self.model}"
+                        )
+                        results[idx] = error_completion
+                    finally:
+                        pbar.update(1)
+
+        # Ensure all results are Completion instances
+        return [result if result is not None else Completion(
+            id="",
+            created=0,
+            content="Error: Unknown error occurred",
+            finish_reason="error",
+            model=f"{self.__class__.__name__}/{self.model}"
+        ) for result in results]

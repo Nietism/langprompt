@@ -1,7 +1,7 @@
-from langprompt.trace.stores.duckdb import DuckDBStore
+
 from langprompt.base.message import Message
 from langprompt.llms.openai import OpenAI
-
+from langprompt.store.duckdb import DuckDBStore
 
 
 def main():

@@ -9,7 +9,7 @@ except ImportError:
 from ..base.message import Message, TextPart, ImagePart
 from ..base.response import Completion, CompletionUsage
 from .base import BaseLLM
-from ..trace import BaseStore
+from ..store import BaseStore
 from ..cache import BaseCache
 
 
