@@ -2,6 +2,8 @@
 
 LangPrompt is a Python library for creating chat prompts with template support.
 
+> Some code come from <https://github.com/cfahlgren1/observers>，<https://github.com/Mirascope/mirascope>
+
 ## Installation
 
 ```bash
