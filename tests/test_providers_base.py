@@ -1,6 +1,6 @@
 """Tests for base provider"""
 import pytest
-from typing import List, Iterator
+from typing import List, Iterator, Dict, Any
 from datetime import datetime
 
 from langprompt.llms.base import BaseLLM
@@ -15,7 +15,7 @@ def test_base_provider_abstract():
 def test_base_provider_implementation():
     """Test that BaseProvider can be implemented"""
     class TestProvider(BaseLLM):
-        def _chat(self, messages: List[Message], **kwargs) -> Completion:
+        def _chat(self, messages: List[Message], params: Dict[str, Any]) -> Completion:
             return Completion(
                 content="test",
                 role="assistant",
@@ -24,7 +24,7 @@ def test_base_provider_implementation():
                 model="test_model"
             )
 
-        def _stream(self, messages: List[Message], **kwargs) -> Iterator[Completion]:
+        def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
             yield Completion(
                 content="test",
                 role="assistant",
@@ -32,6 +32,8 @@ def test_base_provider_implementation():
                 created=int(datetime.now().timestamp()),
                 model="test_model"
             )
+        def _prepare_params(self, messages: List[Message], **kwargs) -> Dict[str, Any]:
+            return kwargs
 
     # Should be able to instantiate concrete implementation
     provider = TestProvider()

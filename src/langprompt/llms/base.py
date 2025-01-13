@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import List, Iterator, Optional
+from typing import List, Iterator, Optional, Dict, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import hashlib
 import json
@@ -45,13 +45,13 @@ class BaseLLM(ABC):
         self.store = store if store is not None else DuckDBStore.connect()
         self.rate_limiter = ThreadingRateLimiter(query_per_second)
 
-    def _get_from_cache(self, messages: List[Message], **kwargs) -> Optional[Completion]:
+    def _get_from_cache(self, messages: List[Message], params: Dict[str, Any]) -> Optional[Completion]:
         """从缓存中获取结果"""
         if not self.cache:
             return None
 
         # 移除不应该影响缓存键的参数
-        cache_kwargs = kwargs.copy()
+        cache_kwargs = params.copy()
         for key in ['use_cache', 'cache_ttl', 'stream']:
             cache_kwargs.pop(key, None)
 
@@ -66,13 +66,13 @@ class BaseLLM(ABC):
             return Completion(**cached)
         return None
 
-    def _save_to_cache(self, messages: List[Message], completion: Completion, **kwargs):
+    def _save_to_cache(self, messages: List[Message], completion: Completion, params: Dict[str, Any]):
         """保存结果到缓存"""
         if not self.cache:
             return
 
         # 移除不应该影响缓存键的参数
-        cache_kwargs = kwargs.copy()
+        cache_kwargs = params.copy()
         for key in ['use_cache', 'cache_ttl', 'stream']:
             cache_kwargs.pop(key, None)
 
@@ -83,7 +83,7 @@ class BaseLLM(ABC):
         )
         self.cache.set(key, completion.model_dump())
 
-    def _handle_cache(self, messages: List[Message], use_cache: bool = True, **kwargs) -> Optional[Completion]:
+    def _handle_cache(self, messages: List[Message], params: Dict[str, Any], use_cache: bool = True) -> Optional[Completion]:
         """Handle cache logic
 
         Returns:
@@ -92,23 +92,25 @@ class BaseLLM(ABC):
         if not use_cache:
             return None
 
-        return self._get_from_cache(messages, **kwargs)
+        return self._get_from_cache(messages, params)
 
-    def _handle_store(self, messages: List[Message], completion: Optional[Completion] = None, error: Optional[Exception] = None):
+    def _handle_store(self, messages: List[Message], completion: Optional[Completion] = None, error: Optional[Exception] = None, params: Optional[Dict[str, Any]] = None):
         """Handle store logic for tracking responses"""
         try:
             if completion:
                 entry = ResponseRecord.create(
                     response=completion,
                     messages=messages,
-                    model=f"{self.__class__.__name__}/{self.model}"
+                    model=f"{self.__class__.__name__}/{self.model}",
+                    properties=params,
                 )
                 self.store.add(entry)
             elif error:
                 entry = ResponseRecord.create(
                     error=error,
                     messages=messages,
-                    model=f"{self.__class__.__name__}/{self.model}"
+                    model=f"{self.__class__.__name__}/{self.model}",
+                    properties=params,
                 )
                 self.store.add(entry)
         except Exception as e:
@@ -124,34 +126,36 @@ class BaseLLM(ABC):
         use_cache: bool = True,
         **kwargs
     ) -> Completion:
+        params = self._prepare_params(messages, **kwargs)
+        params["stream"] = False
         # Try to get from cache first
-        if cached := self._handle_cache(messages, use_cache, **kwargs):
-            self._handle_store(messages, completion=cached)
+        if cached := self._handle_cache(messages, params, use_cache):
+            self._handle_store(messages, completion=cached, params=params)
             return cached
 
         try:
             # Get completion from LLM
             with self.rate_limiter:
-                completion = self._chat(messages, **kwargs)
+                completion = self._chat(messages, params)
 
             # Save to cache if enabled
             if completion and use_cache:
-                self._save_to_cache(messages, completion, **kwargs)
+                self._save_to_cache(messages, completion, params)
 
             # Save to store
-            self._handle_store(messages, completion=completion)
+            self._handle_store(messages, completion=completion, params=params)
 
             return completion
         except Exception as e:
             # Handle error
-            self._handle_store(messages, error=e)
+            self._handle_store(messages, error=e, params=params)
             raise e
 
     @abstractmethod
     def _chat(
         self,
         messages: List[Message],
-        **kwargs
+        params: Dict[str, Any]
     ) -> Completion:
         pass
 
@@ -161,15 +165,17 @@ class BaseLLM(ABC):
         use_cache: bool = True,
         **kwargs
     ) -> Iterator[Completion]:
-        if cached := self._handle_cache(messages, use_cache, **kwargs):
-            self._handle_store(messages, completion=cached)
+        params = self._prepare_params(messages, **kwargs)
+        params["stream"] = True
+        if cached := self._handle_cache(messages, use_cache, params):
+            self._handle_store(messages, completion=cached, params=params)
             yield cached
             return
 
         try:
             # 获取流式响应
             completions = []
-            for completion in self._stream(messages, **kwargs):
+            for completion in self._stream(messages, params):
                 completions.append(completion)
                 yield completion
 
@@ -177,18 +183,18 @@ class BaseLLM(ABC):
             if completions:
                 merged_completion = merge_stream_completions(completions)
                 if use_cache:
-                    self._save_to_cache(messages, merged_completion, **kwargs)
-                self._handle_store(messages, completion=merged_completion)
+                    self._save_to_cache(messages, merged_completion, params)
+                self._handle_store(messages, completion=merged_completion, params=params)
 
         except Exception as e:
-            self._handle_store(messages, error=e)
+            self._handle_store(messages, error=e, params=params)
             raise e
 
     @abstractmethod
     def _stream(
         self,
         messages: List[Message],
-        **kwargs
+        params: Dict[str, Any]
     ) -> Iterator[Completion]:
         pass
 
@@ -225,3 +231,7 @@ class BaseLLM(ABC):
                         pbar.update(1)
 
         return results
+
+    @abstractmethod
+    def _prepare_params(self, messages: List[Message], **kwargs) -> Dict[str, Any]:
+        pass

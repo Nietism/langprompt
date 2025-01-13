@@ -68,7 +68,7 @@ class OpenAI(BaseLLM):
     def _chat(
         self,
         messages: List[Message],
-        **kwargs
+        params: Dict[str, Any],
     ) -> Completion:
         """Send a chat completion request
 
@@ -79,8 +79,6 @@ class OpenAI(BaseLLM):
         Returns:
             Completion object
         """
-        params = self._prepare_params(messages, **kwargs)
-        params["stream"] = False
 
         # Get response from OpenAI
         raw_response = self.client.chat.completions.create(**params)
@@ -103,7 +101,7 @@ class OpenAI(BaseLLM):
             raw_response=raw_response.model_dump()
         )
 
-    def _stream(self, messages: List[Message], **kwargs) -> Iterator[Completion]:
+    def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
         """Stream chat completion request
 
         Args:
@@ -113,8 +111,6 @@ class OpenAI(BaseLLM):
         Returns:
             Iterator of Completion objects
         """
-        params = self._prepare_params(messages, **kwargs)
-        params["stream"] = True
 
         # Get response from OpenAI
         raw_response = self.client.chat.completions.create(**params)

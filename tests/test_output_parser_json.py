@@ -57,19 +57,6 @@ def test_json_output_parser_none_content():
     with pytest.raises(ValueError, match="Completion content is None"):
         parser.parse(completion)
 
-def test_json_output_parser_invalid_json():
-    """Test JSONOutputParser with invalid JSON"""
-    parser = JSONOutputParser(dict)
-    completion = Completion(
-        content="{invalid json}",
-        role="assistant",
-        id="test_id",
-        created=int(datetime.now().timestamp()),
-        model="test_model"
-    )
-    with pytest.raises(ValueError, match="Failed to parse JSON from LLM response"):
-        parser.parse(completion)
-
 def test_json_output_parser_invalid_type():
     """Test JSONOutputParser with invalid type conversion"""
     parser = JSONOutputParser(TestData)

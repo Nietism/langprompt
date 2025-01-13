@@ -1,6 +1,8 @@
 from typing import Iterator, Type
 
 import json
+import json_repair
+
 from ..base.response import Completion
 
 from langprompt.output_parser.base import OutputParser, OutputType
@@ -36,22 +38,20 @@ class JSONOutputParser(OutputParser[OutputType]):
         if content is None:
             raise ValueError("Completion content is None")
 
-        try:
-            result = json.loads(content)
-            # If output type is dict, return the result directly
-            if self.output_class is dict:
-                return result  # type: ignore
-            # Otherwise, convert dict to specified output_class
-            if isinstance(result, dict):
-                try:
-                    obj = self.output_class(**result)
-                    return obj
-                except Exception as e:
-                    raise ValueError(f"Failed to convert JSON to {self.output_class.__name__}")
-            # If result is not a dict, raise error
-            raise ValueError(f"Expected dict from JSON, got {type(result)}")
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Failed to parse JSON from LLM response: {content}") from e
+        result = json_repair.loads(content)
+        # If output type is dict, return the result directly
+        if self.output_class is dict:
+            return result  # type: ignore
+        # Otherwise, convert dict to specified output_class
+        if isinstance(result, dict):
+            try:
+                obj = self.output_class(**result)
+                return obj
+            except Exception as e:
+                raise ValueError(f"Failed to convert JSON to {self.output_class.__name__}")
+        # If result is not a dict, raise error
+        raise ValueError(f"Expected dict from JSON, got {type(result)}")
+
 
     def stream_parse(self, completion: Iterator[Completion]) -> Iterator[OutputType]:
         """Stream parsing is not supported for JSON responses."""

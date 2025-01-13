@@ -1,5 +1,5 @@
 """Tests for LLM cache functionality"""
-from typing import List, Iterator
+from typing import List, Iterator, Dict, Any
 from datetime import datetime
 import time
 from unittest.mock import patch
@@ -15,7 +15,7 @@ class MockLLM(BaseLLM):
         super().__init__()
         self.call_count = 0
 
-    def _chat(self, messages: List[Message], **kwargs) -> Completion:
+    def _chat(self, messages: List[Message], params: Dict[str, Any]) -> Completion:
         response = Completion(
             content=f"Response #{self.call_count + 1}",
             role="assistant",
@@ -26,7 +26,7 @@ class MockLLM(BaseLLM):
         self.call_count += 1
         return response
 
-    def _stream(self, messages: List[Message], **kwargs) -> Iterator[Completion]:
+    def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
         response = Completion(
             content=f"Response #{self.call_count + 1}",
             role="assistant",
@@ -36,6 +36,9 @@ class MockLLM(BaseLLM):
         )
         self.call_count += 1
         yield response
+    
+    def _prepare_params(self, messages: List[Message], **kwargs) -> Dict[str, Any]:
+        return kwargs
 
 def test_memory_cache():
     """Test that MemoryCache works correctly with LLM"""

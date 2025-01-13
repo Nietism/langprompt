@@ -44,12 +44,13 @@ class Qianfan(BaseLLM):
 
         self.model = endpoint if endpoint else model
 
-        self.client = qianfan.ChatCompletion(**chat_kwargs)
+        self.chat_kwargs = chat_kwargs
+        self.client = qianfan.ChatCompletion()
 
     def _chat(
         self,
         messages: List[Message],
-        **kwargs
+        params: Dict[str, Any]
     ) -> Completion:
         """Send a chat completion request to Qianfan API
 
@@ -60,8 +61,6 @@ class Qianfan(BaseLLM):
         Returns:
             Completion object
         """
-        params = self._prepare_params(messages, **kwargs)
-        params["stream"] = False
 
         # Get response from Qianfan using do() method
         raw_response = self.client.do(**params)
@@ -83,7 +82,7 @@ class Qianfan(BaseLLM):
             raw_response=raw_response.body, # type: ignore
         )
 
-    def _stream(self, messages: List[Message], **kwargs) -> Iterator[Completion]:
+    def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
         """Stream chat completion request from Qianfan API
 
         Args:
@@ -93,8 +92,6 @@ class Qianfan(BaseLLM):
         Returns:
             Iterator of Completion objects
         """
-        params = self._prepare_params(messages, **kwargs)
-        params["stream"] = True
 
         # Get response from Qianfan using do() method
         raw_response = self.client.do(**params)
@@ -128,6 +125,7 @@ class Qianfan(BaseLLM):
 
         params = {
             "messages": qianfan_messages,
+            **self.chat_kwargs
         }
         if system:
             params["system"] = system # type: ignore
