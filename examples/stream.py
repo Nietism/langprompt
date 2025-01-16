@@ -13,21 +13,23 @@ class Translation:
 
     def __init__(self, provider: OpenAI):
         self.provider = provider
-        self.prompt = Prompt[self.Input]("""
+        self.prompt = Prompt["Translation.Input", str](
+            template="""
 <|system|>
 You are a professional translator. Please accurately translate the text while maintaining its original meaning and style.
 <|end|>
 
 <|user|>
-Translate the following text into {{language}}: {{text}}
+Translate the following text into {{input.language}}: {{input.text}}
 <|end|>
-""")
-        self.parser = TextOutputParser()
+""",
+            output_parser=TextOutputParser(),
+        )
 
     def __call__(self, input: Input, **kwargs) -> Iterator[str]:
         messages = self.prompt.parse(input)
         response = self.provider.stream(messages, **kwargs)
-        return self.parser.stream_parse(response)
+        return self.prompt.parse_output_stream(response)
 
 
 if __name__ == "__main__":

@@ -5,10 +5,14 @@ from dataclasses import asdict, dataclass, field
 from typing import List, Optional, cast
 
 import duckdb
-from .store import BaseStore
-from .model import Record
 
-DEFAULT_DB_NAME = "store.duckdb"
+from .model import Record
+from .store import BaseStore
+
+__all__ = ["DuckDBStore"]
+
+DEFAULT_DB_NAME = ".store.duckdb"
+
 
 @dataclass
 class DuckDBStore(BaseStore):
@@ -72,13 +76,13 @@ class DuckDBStore(BaseStore):
         json_fields = cast(List[str], record.json_fields)
         for json_field in json_fields:
             if record_dict[json_field]:
-                record_dict[json_field] = json.dumps(record_dict[json_field], ensure_ascii=False)
+                record_dict[json_field] = json.dumps(
+                    record_dict[json_field], ensure_ascii=False
+                )
 
         assert hasattr(record, "table_columns"), "Record must have table_columns"
         table_columns = cast(List[str], record.table_columns)
-        placeholders = ", ".join(
-            ["$" + str(i + 1) for i in range(len(table_columns))]
-        )
+        placeholders = ", ".join(["$" + str(i + 1) for i in range(len(table_columns))])
 
         # Sort record_dict based on table_columns order
         sorted_dict = {k: record_dict[k] for k in table_columns}
@@ -86,10 +90,7 @@ class DuckDBStore(BaseStore):
 
         self._conn.execute(
             f"INSERT INTO {table_name} VALUES ({placeholders})",
-            [
-                record_dict[k] if k in record_dict else None
-                for k in table_columns
-            ],
+            [record_dict[k] if k in record_dict else None for k in table_columns],
         )
 
     def get_unsynced(self, table_name: str) -> List[tuple]:

@@ -1,12 +1,14 @@
 from abc import ABC, abstractmethod
-from typing import TypeVar, Generic, Iterator
+from typing import Generic, Iterator, TypeVar
 
 from ..base.response import Completion
 
-OutputType = TypeVar('OutputType')
+OutputType = TypeVar("OutputType")
+
 
 class OutputParser(ABC, Generic[OutputType]):
     """Output parser base class"""
+
     @abstractmethod
     def parse(self, completion: Completion) -> OutputType:
         pass

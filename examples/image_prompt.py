@@ -1,38 +1,50 @@
 import base64
 import os
+
 from pydantic import BaseModel
-from langprompt import TextOutputParser, Prompt
+
+from langprompt import Prompt, TextOutputParser
 from langprompt.llms.openai import OpenAI
 
 
-
 class Input(BaseModel):
-    image_base64: str
+    image: bytes
 
-prompt = Prompt[Input]("""
+    @property
+    def image_base64(self):
+        return base64.b64encode(self.image).decode("utf-8")
+
+
+class ImagePrompt(Prompt[Input, str]):
+    def __init__(self):
+        super().__init__(
+            template="""
 <|system|>
 You are a helpful assistant.
 <|end|>
 
 <|user|>
-OCR the image: <|image|>{{ image_base64 }}<|/image|>
+OCR the image: <|image|>{{ input.image_base64 }}<|/image|>
 <|end|>
-""")
-
-parser = TextOutputParser()
+""",
+            output_parser=TextOutputParser(),
+        )
 
 
 if __name__ == "__main__":
     from langprompt.cache import SQLiteCache
     from langprompt.store import DuckDBStore
+
     provider = OpenAI(model="gpt-4o-mini", cache=SQLiteCache(), store=DuckDBStore())
+    prompt = ImagePrompt()
+    parser = TextOutputParser()
 
     with open(os.path.join(os.path.dirname(__file__), "example.png"), "rb") as f:
-        image_base64 = base64.b64encode(f.read()).decode("utf-8")
+        image = f.read()
 
-    messages = prompt.parse(Input(image_base64=image_base64))
+    messages = prompt.parse(Input(image=image))
     print(f"Messages: {messages}")
     response = provider.chat(messages)
     print(f"Response: {response}")
-    result = parser.parse(response)
+    result = prompt.parse_output(response)
     print(f"Result: {result}")

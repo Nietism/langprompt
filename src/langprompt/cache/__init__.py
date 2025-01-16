@@ -1,10 +1,19 @@
-from abc import ABC, abstractmethod
+"""Copy from langchain sqlite cache implementation"""
+
 import json
 import sqlite3
-from typing import Any, Dict, Optional
-from datetime import datetime, timedelta
 import threading
 import time
+from abc import ABC, abstractmethod
+from datetime import datetime, timedelta
+from typing import Any, Dict, Optional, Tuple
+
+
+__all__ = ["BaseCache", "MemoryCache", "SQLiteCache"]
+
+
+DEFAULT_SQLITE_CACHE_PATH = ".llm_cache.db"
+
 
 class BaseCache(ABC):
     @abstractmethod
@@ -23,9 +32,10 @@ class BaseCache(ABC):
     def clear(self) -> None:
         pass
 
+
 class MemoryCache(BaseCache):
     def __init__(self, ttl: int = 0):
-        self._cache = {}
+        self._cache: Dict[str, Tuple[Dict[str, Any], Optional[float]]] = {}
         self._lock = threading.Lock()
         self._ttl = ttl
 
@@ -56,8 +66,9 @@ class MemoryCache(BaseCache):
         with self._lock:
             self._cache.clear()
 
+
 class SQLiteCache(BaseCache):
-    def __init__(self, db_path: str = ".llm_cache.db", ttl: int = 0):
+    def __init__(self, db_path: str = DEFAULT_SQLITE_CACHE_PATH, ttl: int = 0):
         self.db_path = db_path
         self._ttl = ttl
         self._local = threading.local()
@@ -65,7 +76,7 @@ class SQLiteCache(BaseCache):
 
     @property
     def _conn(self) -> sqlite3.Connection:
-        if not hasattr(self._local, 'conn'):
+        if not hasattr(self._local, "conn"):
             self._local.conn = sqlite3.connect(self.db_path)
         return self._local.conn
 
@@ -82,8 +93,7 @@ class SQLiteCache(BaseCache):
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         with self._conn as conn:
             cursor = conn.execute(
-                "SELECT value, expiry FROM cache WHERE key = ?",
-                (key,)
+                "SELECT value, expiry FROM cache WHERE key = ?", (key,)
             )
             row = cursor.fetchone()
 
@@ -105,7 +115,7 @@ class SQLiteCache(BaseCache):
 
             conn.execute(
                 "INSERT OR REPLACE INTO cache (key, value, expiry) VALUES (?, ?, ?)",
-                (key, json.dumps(value), expiry)
+                (key, json.dumps(value), expiry),
             )
 
     def delete(self, key: str) -> None:
@@ -117,6 +127,6 @@ class SQLiteCache(BaseCache):
             conn.execute("DELETE FROM cache")
 
     def __del__(self):
-        if hasattr(self._local, 'conn'):
+        if hasattr(self._local, "conn"):
             self._local.conn.close()
             del self._local.conn

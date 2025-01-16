@@ -1,11 +1,11 @@
 from typing import Iterator, Type
 
-import json
 import json_repair
+
+from langprompt.output_parser.base import OutputParser, OutputType
 
 from ..base.response import Completion
 
-from langprompt.output_parser.base import OutputParser, OutputType
 
 class JSONOutputParser(OutputParser[OutputType]):
     """A parser that converts JSON responses from LLM to Python objects.
@@ -14,6 +14,7 @@ class JSONOutputParser(OutputParser[OutputType]):
     1. A dictionary (if output_class is dict)
     2. An instance of the specified output_class (must be a dataclass or similar)
     """
+
     def __init__(self, output_class: Type[OutputType]) -> None:
         """Initialize the JSON parser with the target output class.
 
@@ -48,10 +49,11 @@ class JSONOutputParser(OutputParser[OutputType]):
                 obj = self.output_class(**result)
                 return obj
             except Exception as e:
-                raise ValueError(f"Failed to convert JSON to {self.output_class.__name__}")
+                raise ValueError(
+                    f"Failed to convert JSON to {self.output_class.__name__}: {e}"
+                )
         # If result is not a dict, raise error
         raise ValueError(f"Expected dict from JSON, got {type(result)}")
-
 
     def stream_parse(self, completion: Iterator[Completion]) -> Iterator[OutputType]:
         """Stream parsing is not supported for JSON responses."""

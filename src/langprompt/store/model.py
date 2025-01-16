@@ -68,21 +68,27 @@ class ResponseRecord(Record):
     total_tokens: Optional[int] = None
     finish_reason: Optional[str] = None
     tool_calls: Optional[Any] = None
-    tags: Optional[List[str]] = field(default_factory=list)
-    properties: Optional[Dict[str, Any]] = field(default_factory=dict)
+    tags: List[str] = field(default_factory=list)
+    properties: Dict[str, Any] = field(default_factory=dict)
     error: Optional[str] = None
     raw_response: Optional[Dict[str, Any]] = None
     synced_at: Optional[str] = None
 
     @classmethod
-    def create(cls, messages: List[Message], response: Optional[Completion] = None, error: Optional[Exception] = None, **kwargs):
+    def create(
+        cls,
+        messages: List[Message],
+        response: Optional[Completion] = None,
+        error: Optional[Exception] = None,
+        **kwargs,
+    ):
         """Create a response record from an API response or error"""
         if not response:
             return cls(finish_reason="error", error=str(error), **kwargs)
 
         usage = response.usage.model_dump() if response.usage else {}
 
-        return cls( 
+        return cls(
             response_id=response.id,
             completion_tokens=usage.get("completion_tokens"),
             prompt_tokens=usage.get("prompt_tokens"),

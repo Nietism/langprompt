@@ -1,41 +1,58 @@
 from pydantic import BaseModel
-from langprompt import TextOutputParser, Prompt
-from langprompt.llms.openai import OpenAI
+
+from langprompt import Prompt, TextOutputParser, Completion, BaseLLM
 from langprompt.cache import SQLiteCache
+from langprompt.llms.openai import OpenAI
 from langprompt.store import DuckDBStore
 
-
-class Input(BaseModel):
+class TranslationInput(BaseModel):
     text: str
     language: str = "Chinese"
 
-prompt = Prompt[Input]("""
+
+class Translation:
+    def __init__(self, provider: BaseLLM):
+        self.provider = provider
+        self.prompt = Prompt[TranslationInput, str](
+            template="""
 <|system|>
 You are a professional translator. Please accurately translate the text while maintaining its original meaning and style.
 <|end|>
 
 <|user|>
-Translate the following text into {{language}}: {{text}}
+Translate the following text into {{input.language}}: {{input.text}}
 <|end|>
-""")
+""",
+            output_parser=TextOutputParser(),
+        )
+
+    def __call__(
+        self, inputs: list[TranslationInput], batch_size: int = 2, **kwargs
+    ) -> list[Completion]:
+        messages = [self.prompt.parse(input) for input in inputs]
+        responses = self.provider.batch(messages, batch_size=batch_size, **kwargs)
+        return [response for response in responses]
+
 
 if __name__ == "__main__":
+    provider = OpenAI(
+        model="gpt-4o-mini",
+        cache=SQLiteCache(),
+        store=DuckDBStore(),
+        query_per_second=0.2,
+    )
 
-    parser = TextOutputParser()
-    provider = OpenAI(model="gpt-4o-mini", cache=SQLiteCache(), store=DuckDBStore(), query_per_second=0.2)
+    translate = Translation(provider)
     inputs = [
-        Input(text="Hello, how are you?", language="Chinese"),
-        Input(text="Hello, how are you?", language="English"),
-        Input(text="Hello, how are you?", language="Chinese"),
+        TranslationInput(text="Hello, how are you?", language="Chinese"),
+        TranslationInput(text="Hello, how are you?", language="English"),
+        TranslationInput(text="Hello, how are you?", language="Chinese"),
     ]
 
-    messages = [prompt.parse(input) for input in inputs]
-    responses = provider.batch(messages, batch_size=2, enable_retry=True)
+    results = translate(inputs, batch_size=2, enable_retry=True)
 
-    # 处理结果
-    for i, response in enumerate(responses):
-        print(f"\n--- Result {i+1} ---")
+    # Process results
+    for i, result in enumerate(results):
+        print(f"\n--- Result {i + 1} ---")
         print(f"Original: {inputs[i].text}")
-        result = parser.parse(response)
         print(f"Translated: {result}")
-        print(f"Cache Key: {response.cache_key}")

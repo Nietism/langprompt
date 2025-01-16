@@ -1,15 +1,17 @@
 """Tests for OpenAI provider"""
-import pytest
-import base64
-from typing import cast, List
 
+import base64
+
+import pytest
+
+from langprompt.base.message import ImagePart, Message, TextPart
 from langprompt.llms.openai import OpenAI
-from langprompt.base.message import Message, TextPart, ImagePart
-from langprompt.base.response import ToolCall
+
 
 @pytest.fixture
 def provider():
     return OpenAI(model="gpt-4", temperature=0.7)
+
 
 def test_init():
     """Test provider initialization"""
@@ -17,34 +19,39 @@ def test_init():
     assert provider.model == "gpt-4"
     assert provider.temperature == 0.7
 
+
 def test_convert_text_message():
     """Test converting text message to OpenAI format"""
     provider = OpenAI()
     message = Message(role="user", content="Hello")
     result = provider._convert_message_to_dict(message)
-    assert result == {
-        "role": "user",
-        "content": "Hello"
-    }
+    assert result == {"role": "user", "content": "Hello"}
+
 
 def test_convert_multimodal_message():
     """Test converting multimodal message to OpenAI format"""
     provider = OpenAI()
     image_data = b"fake_image_data"
-    message = Message(role="user", content=[
-        TextPart(text="Hello", type="text"),
-        ImagePart(image=image_data, media_type="image/jpeg", type="image")
-    ])
+    message = Message(
+        role="user",
+        content=[
+            TextPart(text="Hello", type="text"),
+            ImagePart(image=image_data, media_type="image/jpeg", type="image"),
+        ],
+    )
     result = provider._convert_message_to_dict(message)
 
-    expected_image_url = f"data:image/jpeg;base64,{base64.b64encode(image_data).decode('utf-8')}"
+    expected_image_url = (
+        f"data:image/jpeg;base64,{base64.b64encode(image_data).decode('utf-8')}"
+    )
     assert result == {
         "role": "user",
         "content": [
             {"type": "text", "text": "Hello"},
-            {"type": "image_url", "image_url": {"url": expected_image_url}}
-        ]
+            {"type": "image_url", "image_url": {"url": expected_image_url}},
+        ],
     }
+
 
 def test_chat():
     """Test chat completion"""
@@ -62,6 +69,7 @@ def test_chat():
     assert completion.finish_reason in ["stop", "length"]
     assert completion.tool_calls is None
 
+
 def test_stream():
     """Test streaming completion"""
     provider = OpenAI()
@@ -74,6 +82,7 @@ def test_stream():
     assert isinstance(full_response, str)
     assert len(full_response) > 0
     assert response_chunks[0].role == "assistant"
+
 
 def test_prepare_params():
     """Test parameter preparation"""

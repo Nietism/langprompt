@@ -1,28 +1,61 @@
-from typing import List, Sequence
-import re
 import base64
 import binascii
+import re
+from typing import List, Sequence, Literal
+from pydantic import BaseModel
 
-from langprompt.base.message import TextPart, ImagePart
+__all__ = ["TextPart", "ImagePart"]
+
+# First pattern matches the entire image tag
+IMAGE_TAG_PATTERN = re.compile(r"<\|image(.*?)\|>([^<]+)<\|/image\|>")
+
+# Second pattern extracts attributes
+ATTR_PATTERN = re.compile(r'media_type="([^"]+)"?\s*')
+
+
+class TextPart(BaseModel):
+    """A content part for text.
+
+    Attributes:
+        type: Always "text"
+        text: The text content
+    """
+
+    type: Literal["text"]
+    text: str
+
+
+class ImagePart(BaseModel):
+    """A content part for images.
+
+    Attributes:
+        type: Always "image"
+        media_type: The media type (e.g. image/jpeg)
+        image: The raw image bytes
+    """
+
+    type: Literal["image"]
+    media_type: str
+    image: bytes
+    # TODO: support OpenAI detail field: https://platform.openai.com/docs/guides/vision#low-or-high-fidelity-image-understanding
+
 
 def decode_content(content: str) -> Sequence[TextPart | ImagePart]:
-    # First pattern matches the entire image tag
-    IMAGE_TAG_PATTERN = re.compile(
-        r'<\|image(.*?)\|>([^<]+)<\|/image\|>'
-    )
+    """Decode the content into a list of TextPart / ImagePart / etc.
 
-    # Second pattern extracts attributes
-    ATTR_PATTERN = re.compile(
-        r'media_type="([^"]+)"?\s*'
-    )
+    Args:
+        content: The content to decode.
 
+    Returns:
+        A list of TextPart/ImagePart/etc.
+    """
     parts: List[TextPart | ImagePart] = []
     last_end = 0
 
     for match in IMAGE_TAG_PATTERN.finditer(content):
         # Handle text before image tag
         if match.start() > last_end:
-            text = content[last_end:match.start()]
+            text = content[last_end : match.start()]
             if text.strip():
                 parts.append(TextPart(type="text", text=text))
 
@@ -66,8 +99,16 @@ def decode_content(content: str) -> Sequence[TextPart | ImagePart]:
 
     return parts
 
-def encode_content(content: str |Sequence[TextPart | ImagePart]) -> str:
-    """Return the content as a string."""
+
+def encode_content(content: str | Sequence[TextPart | ImagePart]) -> str:
+    """Return the content as a string.
+
+    Args:
+        content: The content to encode, which can be a string or a list of TextPart/ImagePart/etc.
+
+    Returns:
+        The encoded content as a string.
+    """
     if isinstance(content, str):
         return content
     content_str = ""
@@ -81,7 +122,14 @@ def encode_content(content: str |Sequence[TextPart | ImagePart]) -> str:
 
 
 def detect_media_type(image_data: bytes) -> str:
-    """Detect the media type of the binary data."""
+    """Detect the media type of the binary data.
+
+    Args:
+        image_data: The binary data to detect.
+
+    Returns:
+        The media type of the binary data.
+    """
     if image_data.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
     elif image_data.startswith(b"\x89PNG\r\n\x1a\n"):

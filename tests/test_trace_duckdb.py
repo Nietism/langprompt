@@ -3,8 +3,10 @@ import tempfile
 from unittest import TestCase
 
 import duckdb
+
 from langprompt.store.duckdb import DuckDBStore
 from langprompt.store.model import ResponseRecord
+
 
 class TestDuckDBStore(TestCase):
     def setUp(self):
@@ -31,7 +33,7 @@ class TestDuckDBStore(TestCase):
             id="test1",
             model="test-model",
             assistant_message="test content",
-            messages=[{"role": "user", "content": "test message"}]
+            messages=[{"role": "user", "content": "test message"}],
         )
         self.store.add(record)
 
@@ -41,16 +43,16 @@ class TestDuckDBStore(TestCase):
         ).fetchone()
 
         self.assertIsNotNone(result)
-        self.assertEqual(result[0], "test1") # type: ignore
-        self.assertEqual(result[1], "test-model") # type: ignore
-        self.assertEqual(result[2], "test content") # type: ignore
+        self.assertEqual(result[0], "test1")  # type: ignore
+        self.assertEqual(result[1], "test-model")  # type: ignore
+        self.assertEqual(result[2], "test content")  # type: ignore
 
     def test_get_unsynced(self):
         """Test retrieving unsynced records"""
         # Add test records
         records = [
             ResponseRecord(id="test1", model="model1", assistant_message="content1"),
-            ResponseRecord(id="test2", model="model2", assistant_message="content2")
+            ResponseRecord(id="test2", model="model2", assistant_message="content2"),
         ]
         for record in records:
             self.store.add(record)
@@ -65,7 +67,9 @@ class TestDuckDBStore(TestCase):
     def test_mark_as_synced(self):
         """Test marking records as synced"""
         # Add test record
-        record = ResponseRecord(id="test1", model="test-model", assistant_message="test content")
+        record = ResponseRecord(
+            id="test1", model="test-model", assistant_message="test content"
+        )
         self.store.add(record)
 
         table_name = self.store._tables[0]
@@ -79,7 +83,7 @@ class TestDuckDBStore(TestCase):
         result = self.store._conn.execute(  # type: ignore
             f"SELECT synced_at FROM {table_name} WHERE id = 'test1'"
         ).fetchone()
-        self.assertIsNotNone(result[0]) # type: ignore
+        self.assertIsNotNone(result[0])  # type: ignore
 
     def test_close_connection(self):
         """Test closing database connection"""

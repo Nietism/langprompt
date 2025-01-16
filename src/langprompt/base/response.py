@@ -1,9 +1,19 @@
-from typing import List, Optional, Literal, Dict, Any
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel
+
+__all__ = [
+    "Completion",
+    "CompletionUsage",
+    "ToolCall",
+    "ToolCallFunction",
+    "merge_stream_completions",
+]
 
 
 class CompletionUsage(BaseModel):
     """Usage statistics for the completion request."""
+
     completion_tokens: int
     """Number of tokens in the generated completion."""
 
@@ -41,6 +51,7 @@ class ToolCall(BaseModel):
 
 class Completion(BaseModel):
     """Completion response from an LLM"""
+
     id: str
     """A unique identifier for the completion."""
 
@@ -53,7 +64,9 @@ class Completion(BaseModel):
     usage: Optional[CompletionUsage] = None
     """Usage statistics for the completion request."""
 
-    finish_reason: Optional[Literal["stop", "length", "tool_calls", "content_filter", "error"]] = None
+    finish_reason: Optional[
+        Literal["stop", "length", "tool_calls", "content_filter", "error"]
+    ] = None
     """The reason the model stopped generating tokens.
 
     This will be `stop` if the model hit a natural stop point or a provided stop
@@ -88,7 +101,7 @@ def merge_stream_completions(completions: List[Completion]) -> Completion:
         Merged completion containing concatenated content
     """
     # Use the last completion as the base
-    # TODO: Maybe is not the best way
+    # TODO: Maybe this is not the best way
     last_completion = completions[-1]
     # Merge content
     merged_content = "".join([c.content for c in completions if c.content])

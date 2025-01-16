@@ -3,6 +3,8 @@ import time
 from types import TracebackType
 from typing import Optional, Type
 
+__all__ = ["ThreadingRateLimiter"]
+
 
 class ThreadingRateLimiter:
     def __init__(self, query_per_second: float):

@@ -1,10 +1,13 @@
 """Tests for output parser base"""
-import pytest
-from typing import Iterator
-from datetime import datetime
 
-from langprompt.output_parser.base import OutputParser, TextOutputParser
+from datetime import datetime
+from typing import Iterator
+
+import pytest
+
 from langprompt.base.response import Completion
+from langprompt.output_parser.base import OutputParser, TextOutputParser
+
 
 def test_text_output_parser_parse():
     """Test TextOutputParser parse method"""
@@ -14,7 +17,7 @@ def test_text_output_parser_parse():
         role="assistant",
         id="test_id",
         created=int(datetime.now().timestamp()),
-        model="test_model"
+        model="test_model",
     )
     assert parser.parse(completion) == "Hello"
 
@@ -24,7 +27,7 @@ def test_text_output_parser_parse():
         role="assistant",
         id="test_id",
         created=int(datetime.now().timestamp()),
-        model="test_model"
+        model="test_model",
     )
     assert parser.parse(completion) == ""
 
@@ -34,9 +37,10 @@ def test_text_output_parser_parse():
         role="assistant",
         id="test_id",
         created=int(datetime.now().timestamp()),
-        model="test_model"
+        model="test_model",
     )
     assert parser.parse(completion) == ""
+
 
 def test_text_output_parser_stream_parse():
     """Test TextOutputParser stream_parse method"""
@@ -45,11 +49,41 @@ def test_text_output_parser_stream_parse():
     # Create a list of completion chunks
     created_time = int(datetime.now().timestamp())
     chunks = [
-        Completion(content="Hello", role="assistant", id="chunk1", created=created_time, model="test_model"),
-        Completion(content=" ", role="assistant", id="chunk2", created=created_time, model="test_model"),
-        Completion(content="World", role="assistant", id="chunk3", created=created_time, model="test_model"),
-        Completion(content=None, role="assistant", id="chunk4", created=created_time, model="test_model"),
-        Completion(content="!", role="assistant", id="chunk5", created=created_time, model="test_model")
+        Completion(
+            content="Hello",
+            role="assistant",
+            id="chunk1",
+            created=created_time,
+            model="test_model",
+        ),
+        Completion(
+            content=" ",
+            role="assistant",
+            id="chunk2",
+            created=created_time,
+            model="test_model",
+        ),
+        Completion(
+            content="World",
+            role="assistant",
+            id="chunk3",
+            created=created_time,
+            model="test_model",
+        ),
+        Completion(
+            content=None,
+            role="assistant",
+            id="chunk4",
+            created=created_time,
+            model="test_model",
+        ),
+        Completion(
+            content="!",
+            role="assistant",
+            id="chunk5",
+            created=created_time,
+            model="test_model",
+        ),
     ]
 
     # Convert list to iterator
@@ -59,6 +93,7 @@ def test_text_output_parser_stream_parse():
 
     result = list(parser.stream_parse(chunk_iterator()))
     assert result == ["Hello", " ", "World", "!"]
+
 
 def test_abstract_output_parser():
     """Test abstract OutputParser class"""
