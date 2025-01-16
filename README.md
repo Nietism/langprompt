@@ -14,50 +14,71 @@ pip install langprompt
 
 ```python
 from pydantic import BaseModel
-from langprompt import TextOutputParser, Prompt
-from langprompt.llms.openai import OpenAI
+
+from langprompt import Prompt, TextOutputParser, Completion, BaseLLM
 from langprompt.cache import SQLiteCache
+from langprompt.llms.openai import OpenAI
 from langprompt.store import DuckDBStore
 
-
-class Input(BaseModel):
+class TranslationInput(BaseModel):
     text: str
     language: str = "Chinese"
 
-prompt = Prompt[Input]("""
+
+class Translation:
+    def __init__(self, provider: BaseLLM):
+        self.provider = provider
+        self.prompt = Prompt[TranslationInput, str](
+            template="""
 <|system|>
 You are a professional translator. Please accurately translate the text while maintaining its original meaning and style.
 <|end|>
 
 <|user|>
-Translate the following text into {{language}}: {{text}}
+Translate the following text into {{input.language}}: {{input.text}}
 <|end|>
-""")
+""",
+            output_parser=TextOutputParser(),
+        )
+
+    def __call__(
+        self, inputs: list[TranslationInput], batch_size: int = 2, **kwargs
+    ) -> list[Completion]:
+        messages = [self.prompt.parse(input) for input in inputs]
+        responses = self.provider.batch(messages, batch_size=batch_size, **kwargs)
+        return [response for response in responses]
+
 
 if __name__ == "__main__":
+    provider = OpenAI(
+        model="gpt-4o-mini",
+        cache=SQLiteCache(),
+        store=DuckDBStore(),
+        query_per_second=0.2,
+    )
 
-    parser = TextOutputParser()
-    provider = OpenAI(model="gpt-4o-mini", cache=SQLiteCache(), store=DuckDBStore(), query_per_second=0.2)
+    translate = Translation(provider)
     inputs = [
-        Input(text="Hello, how are you?", language="Chinese"),
-        Input(text="Hello, how are you?", language="English"),
-        Input(text="Hello, how are you?", language="Chinese"),
+        TranslationInput(text="Hello, how are you?", language="Chinese"),
+        TranslationInput(text="Hello, how are you?", language="English"),
+        TranslationInput(text="Hello, how are you?", language="Chinese"),
     ]
 
-    messages = [prompt.parse(input) for input in inputs]
-    responses = provider.batch(messages, batch_size=2, enable_retry=True)
+    results = translate(inputs, batch_size=2, enable_retry=True)
 
-    # 处理结果
-    for i, response in enumerate(responses):
-        print(f"\n--- Result {i+1} ---")
+    # Process results
+    for i, result in enumerate(results):
+        print(f"\n--- Result {i + 1} ---")
         print(f"Original: {inputs[i].text}")
-        result = parser.parse(response)
-        print(f"Translated: {result}")
+        print(f"Translated: {result.content}")
+        print(f"Cache Key: {result.cache_key}")
 ```
 
 执行结果：
 
 ```txt
+Processing batch: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 3/3 [00:07<00:00,  2.39s/it]
+
 --- Result 1 ---
 Original: Hello, how are you?
 Translated: 你好，你好吗？
@@ -71,13 +92,5 @@ Cache Key: None
 --- Result 3 ---
 Original: Hello, how are you?
 Translated: 你好，你好吗？
-Cache Key: 5693a0a16dff61866ca18feef969719cc78979a5f44cd412fef1add7bdcaaa42
+Cache Key: e0cb30b79ecadcc147b3071d70ca1f35a3e5eb95f4d589bbb7758a342ffa81d7
 ```
-
-## Todo
-
-1. OpenAI Tools 完全支持
-2. OpenAI JSON Mode 支持
-3. support data viewer
-4. add to langeval/ragas/distilabel
-distilabel support qianfan、llm cache

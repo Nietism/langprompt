@@ -55,4 +55,5 @@ if __name__ == "__main__":
     for i, result in enumerate(results):
         print(f"\n--- Result {i + 1} ---")
         print(f"Original: {inputs[i].text}")
-        print(f"Translated: {result}")
+        print(f"Translated: {result.content}")
+        print(f"Cache Key: {result.cache_key}")
