@@ -41,5 +41,5 @@ if __name__ == "__main__":
     print(f"Result: {result}")
 
     print("Start to check stream")
-    for chunk in prompt.parse_output_stream(provider.stream(messages)):
+    for chunk in prompt.stream_parse_output(provider.stream(messages)):
         print(chunk)

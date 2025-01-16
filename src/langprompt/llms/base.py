@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, Iterator, List, Optional
@@ -12,6 +13,8 @@ from ..base.ratelimiter import ThreadingRateLimiter
 from ..base.response import Completion, merge_stream_completions
 from ..cache import BaseCache
 from ..store import BaseStore, DuckDBStore, ResponseRecord
+
+logger = logging.getLogger(__name__)
 
 
 def _generate_key(model: str, params: Dict[str, Any]) -> str:
@@ -40,7 +43,7 @@ class BaseLLM(ABC):
             store: Store instance for persistent tracking records, defaults to None which creates a new DuckDBStore
         """
         self.cache = cache
-        self.store = store if store is not None else DuckDBStore.connect()
+        self.store = store
         self.rate_limiter = ThreadingRateLimiter(query_per_second)
 
     def _get_from_cache(
@@ -83,6 +86,9 @@ class BaseLLM(ABC):
         params: Optional[Dict[str, Any]] = None,
     ):
         """Handle store logic for tracking responses"""
+        if not self.store:
+            return
+
         try:
             if completion:
                 entry = ResponseRecord.create(
@@ -101,7 +107,7 @@ class BaseLLM(ABC):
                 )
                 self.store.add(entry)
         except Exception as e:
-            print(f"Error saving to store: {e}")  # Log error but don't raise
+            logger.error(f"Error saving to store: {e}")
 
     def _with_retry(self, func: Callable[[], Any]) -> Any:
         """Generic retry wrapper"""
@@ -130,7 +136,7 @@ class BaseLLM(ABC):
         def _do_chat():
             try:
                 with self.rate_limiter:
-                    completion = self._chat(messages, params)
+                    completion = self._chat(params)
                     if completion and use_cache:
                         self._save_to_cache(completion, params)
                     self._handle_store(messages, completion=completion, params=params)
@@ -142,7 +148,7 @@ class BaseLLM(ABC):
         return self._with_retry(_do_chat) if enable_retry else _do_chat()
 
     @abstractmethod
-    def _chat(self, messages: List[Message], params: Dict[str, Any]) -> Completion:
+    def _chat(self, params: Dict[str, Any]) -> Completion:
         pass
 
     def stream(
@@ -157,7 +163,7 @@ class BaseLLM(ABC):
 
         try:
             completions = []
-            for completion in self._stream(messages, params):
+            for completion in self._stream(params):
                 completions.append(completion)
                 yield completion
 
@@ -176,7 +182,7 @@ class BaseLLM(ABC):
 
     @abstractmethod
     def _stream(
-        self, messages: List[Message], params: Dict[str, Any]
+        self, params: Dict[str, Any]
     ) -> Iterator[Completion]:
         pass
 

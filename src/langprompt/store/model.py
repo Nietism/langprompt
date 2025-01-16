@@ -95,7 +95,7 @@ class ResponseRecord(Record):
             total_tokens=usage.get("total_tokens"),
             assistant_message=response.content,
             finish_reason=response.finish_reason,
-            tool_calls=response.tool_calls,
+            tool_calls=[i.model_dump() for i in response.tool_calls] if response.tool_calls else None,
             messages=[msg.model_dump() for msg in messages],
             raw_response=response.raw_response,
             **kwargs,

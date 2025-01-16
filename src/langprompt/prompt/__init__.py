@@ -17,34 +17,33 @@ class Prompt(ABC, Generic[InputType, OutputType]):
     """Base class for creating structured chat prompts with template support.
 
     This class provides functionality to convert templated strings into a list of
-    chat completion messages compatible with OpenAI's chat API.
+    chat completion messages.
 
     Template Format:
         <|system|>string message content<|end|>
-        <|user|><|image media_type="image/jpeg"|>image_bytes_base64<|/image|>sdfsdfssdf<|end|>
+        <|user|><|image media_type="image/jpeg"|>image_bytes_base64<|/image|>text content<|end|>
 
     Supported roles:
         - system: For system instructions
         - user: For user messages
         - assistant: For AI assistant responses
+        - tool: For tool calls
+        - developer: For developer messages (Only support in OpenAI)
 
     Supported Part Types:
         - text: For text content
         - image: For image content, with optional media_type and detail attributes
-
-    Args:
-        template (str): A template string containing one or more message blocks
-        output_parser (OutputParser[OutputType]): An output parser for the prompt
-
-    Raises:
-        ValueError: If template is empty or contains no valid message blocks
-        ValueError: If image data is not valid.
     """
 
     # Regular expression pattern for matching role-based message blocks
     ROLE_PATTERN: Pattern = re.compile(r"<\|(\w+)\|>(.+?)<\|end\|>", re.DOTALL)
 
     def __init__(self, template: str, output_parser: Optional[OutputParser[OutputType]] = None):
+        """
+        Args:
+            template (str): A template string containing one or more message blocks
+            output_parser (OutputParser[OutputType], optional): An output parser for the prompt
+        """
         self.template = template
         self.output_parser = output_parser
 
@@ -56,7 +55,7 @@ class Prompt(ABC, Generic[InputType, OutputType]):
                               attributes will be used for template variables.
 
         Returns:
-            List[ChatCompletionMessageParam]: A list of chat completion message
+            List[Message]: A list of chat completion message
                                             parameters ready for API use.
 
         Raises:
@@ -90,7 +89,7 @@ class Prompt(ABC, Generic[InputType, OutputType]):
             raise ValueError("Output parser is not set")
         return self.output_parser.parse(completion)
 
-    def parse_output_stream(self, completion: Iterator[Completion]) -> Iterator[OutputType]:
+    def stream_parse_output(self, completion: Iterator[Completion]) -> Iterator[OutputType]:
         if self.output_parser is None:
             raise ValueError("Output parser is not set")
         return self.output_parser.stream_parse(completion)

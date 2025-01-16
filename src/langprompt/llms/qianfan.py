@@ -49,7 +49,6 @@ class Qianfan(BaseLLM):
 
     def _chat(
         self,
-        messages: List[Message],
         params: Dict[str, Any]
     ) -> Completion:
         """Send a chat completion request to Qianfan API
@@ -82,7 +81,7 @@ class Qianfan(BaseLLM):
             raw_response=raw_response.body, # type: ignore
         )
 
-    def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
+    def _stream(self, params: Dict[str, Any]) -> Iterator[Completion]:
         """Stream chat completion request from Qianfan API
 
         Args:

@@ -29,7 +29,7 @@ Translate the following text into {{input.language}}: {{input.text}}
     def __call__(self, input: Input, **kwargs) -> Iterator[str]:
         messages = self.prompt.parse(input)
         response = self.provider.stream(messages, **kwargs)
-        return self.prompt.parse_output_stream(response)
+        return self.prompt.stream_parse_output(response)
 
 
 if __name__ == "__main__":

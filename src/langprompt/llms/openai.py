@@ -9,7 +9,7 @@ except ImportError:
 
 # Local imports
 from ..base.message import Message, TextPart, ImagePart
-from ..base.response import Completion, CompletionUsage
+from ..base.response import Completion, CompletionUsage, ToolCall, ToolCallFunction
 from ..store import BaseStore
 from ..cache import BaseCache
 from .base import BaseLLM
@@ -52,7 +52,7 @@ class OpenAI(BaseLLM):
             return {"role": message.role, "content": message.content}
 
         # Handle multi-modal content
-        content_parts = []
+        content_parts: List[Dict[str, Any]] = []
         for part in message.content:
             if isinstance(part, TextPart):
                 content_parts.append({"type": "text", "text": part.text})
@@ -67,7 +67,6 @@ class OpenAI(BaseLLM):
 
     def _chat(
         self,
-        messages: List[Message],
         params: Dict[str, Any],
     ) -> Completion:
         """Send a chat completion request
@@ -82,9 +81,24 @@ class OpenAI(BaseLLM):
 
         # Get response from OpenAI
         raw_response = self.client.chat.completions.create(**params)
+        if getattr(raw_response, "error", None):
+            raise Exception(f"OpenAI API error: {raw_response.error}")
         message = raw_response.choices[0].message
 
         # Create Completion object
+        tool_calls: List[ToolCall] = []
+        if getattr(message, "tool_calls", None):
+            for tool_call in message.tool_calls:
+                tool_calls.append(ToolCall(
+                    index=tool_call.index,
+                    id=tool_call.id,
+                    type=tool_call.type,
+                    function=ToolCallFunction(
+                        name=tool_call.function.name,
+                        arguments=tool_call.function.arguments
+                    )
+                ))
+
         return Completion(
             id=raw_response.id,
             created=raw_response.created,
@@ -97,11 +111,11 @@ class OpenAI(BaseLLM):
             finish_reason=raw_response.choices[0].finish_reason,
             content=None if getattr(message, "tool_calls", None) else message.content,
             role=message.role,
-            tool_calls=message.tool_calls,
+            tool_calls=tool_calls,
             raw_response=raw_response.model_dump()
         )
 
-    def _stream(self, messages: List[Message], params: Dict[str, Any]) -> Iterator[Completion]:
+    def _stream(self, params: Dict[str, Any]) -> Iterator[Completion]:
         """Stream chat completion request
 
         Args:
